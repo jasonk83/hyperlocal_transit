@@ -39,6 +39,10 @@ st.markdown("""
         color: gray;
         margin-left: 5px;
     }
+    .update-text {
+        font-size: 0.8rem; 
+        color: gray;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -95,7 +99,16 @@ def get_time_badge(mins):
 # --- AUTO-REFRESHING DASHBOARD FRAGMENT ---
 @st.fragment(run_every="30s")
 def render_dashboard():
-    st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: gray;'>Updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}</div>", unsafe_allow_html=True)
+    
+    # UI Layout: Put the timestamp and the update button side-by-side
+    col1, col2 = st.columns([2, 1], vertical_alignment="center")
+    with col1:
+        # Force the timestamp to calculate in Eastern Time
+        current_time = pd.Timestamp.now(tz="US/Eastern").strftime('%I:%M:%S %p')
+        st.markdown(f"<div class='update-text'>Updated: {current_time}</div>", unsafe_allow_html=True)
+    with col2:
+        # Tapping this triggers the fragment to re-run instantly
+        st.button("↻ Update", use_container_width=True)
 
     # 1. Train Arrivals
     st.subheader("🔴 Red Line")
@@ -127,7 +140,6 @@ def render_dashboard():
             dest = t.get("DestinationName", "Unknown")
             cars = str(t.get("Car", ""))
             
-            # Create a formatted car string if data is available
             car_html = f"<span class='car-count'>({cars} cars)</span>" if cars.isdigit() else ""
             
             styled_badge = get_time_badge(mins)
