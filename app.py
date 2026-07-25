@@ -93,21 +93,36 @@ def get_time_badge(mins):
 def render_dashboard():
     st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: gray;'>Updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}</div>", unsafe_allow_html=True)
 
-    # 1. Train Arrivals (Filtered for >= 10 mins)
+    # 1. Train Arrivals (Filtered for >= 10 mins, split by direction)
     st.subheader("🔴 Red Line")
     trains = fetch_train_predictions(TRAIN_STATION_CODE)
     
-    valid_trains = []
+    valid_trains_north = []
+    valid_trains_south = []
+    
     for t in trains:
         mins_str = str(t.get("Min", ""))
+        group = str(t.get("Group", ""))
+        
         # Exclude text codes like ARR, BRD, DLY or anything under 10
         if mins_str.isdigit():
             mins = int(mins_str)
             if mins >= 10:
-                valid_trains.append((t, mins))
+                if group == "1":
+                    # Group 1 = Northbound (Glenmont)
+                    valid_trains_north.append((t, mins))
+                elif group == "2":
+                    # Group 2 = Southbound (Shady Grove / Downtown)
+                    valid_trains_south.append((t, mins))
 
-    if valid_trains:
-        for t, mins in valid_trains[:4]:
+    # Take exactly 2 from each direction (or however many are available if fewer than 2)
+    display_trains = valid_trains_south[:2] + valid_trains_north[:2]
+    
+    # Sort them by time so the final list flows chronologically
+    display_trains = sorted(display_trains, key=lambda x: x[1])
+
+    if display_trains:
+        for t, mins in display_trains:
             dest = t.get("DestinationName", "Unknown")
             styled_badge = get_time_badge(mins)
             st.markdown(f"<div class='transit-row'><span>🚆 To {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
