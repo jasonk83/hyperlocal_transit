@@ -104,7 +104,7 @@ def render_dashboard():
     col1, col2 = st.columns([2, 1], vertical_alignment="center")
     with col1:
         # Force the timestamp to calculate in Eastern Time
-        current_time = pd.Timestamp.now(tz="US/Eastern").strftime('%I:%M:%S %p')
+        current_time = pd.Timestamp.now(tz="America/New_York").strftime('%I:%M:%S %p')
         st.markdown(f"<div class='update-text'>Updated: {current_time}</div>", unsafe_allow_html=True)
     with col2:
         # Tapping this triggers the fragment to re-run instantly
