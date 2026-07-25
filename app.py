@@ -34,6 +34,11 @@ st.markdown("""
         font-weight: bold;
         color: #1f77b4;
     }
+    .car-count {
+        font-size: 0.9rem;
+        color: gray;
+        margin-left: 5px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -78,7 +83,6 @@ def fetch_bus_predictions(stop_id):
 # --- DYNAMIC STYLING HELPER ---
 def get_time_badge(mins):
     """Returns an HTML span with conditional formatting based on numeric minutes."""
-    # Apply conditional colors: Red for exactly 10, Yellow for 11-15, Green for 16+
     if mins == 10:
         bg_color, text_color = "red", "white"
     elif 11 <= mins <= 15:
@@ -93,7 +97,7 @@ def get_time_badge(mins):
 def render_dashboard():
     st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: gray;'>Updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}</div>", unsafe_allow_html=True)
 
-    # 1. Train Arrivals (Filtered for >= 10 mins, split by direction)
+    # 1. Train Arrivals
     st.subheader("🔴 Red Line")
     trains = fetch_train_predictions(TRAIN_STATION_CODE)
     
@@ -104,28 +108,30 @@ def render_dashboard():
         mins_str = str(t.get("Min", ""))
         group = str(t.get("Group", ""))
         
-        # Exclude text codes like ARR, BRD, DLY or anything under 10
         if mins_str.isdigit():
             mins = int(mins_str)
             if mins >= 10:
                 if group == "1":
-                    # Group 1 = Northbound (Glenmont)
                     valid_trains_north.append((t, mins))
                 elif group == "2":
-                    # Group 2 = Southbound (Shady Grove / Downtown)
                     valid_trains_south.append((t, mins))
 
-    # Take exactly 2 from each direction (or however many are available if fewer than 2)
-    display_trains = valid_trains_south[:3] + valid_trains_north[:3]
+    # Take exactly 2 from each direction
+    display_trains = valid_trains_south[:2] + valid_trains_north[:2]
     
-    # Sort them by time so the final list flows chronologically
+    # Sort them chronologically
     display_trains = sorted(display_trains, key=lambda x: x[1])
 
     if display_trains:
         for t, mins in display_trains:
             dest = t.get("DestinationName", "Unknown")
+            cars = str(t.get("Car", ""))
+            
+            # Create a formatted car string if data is available
+            car_html = f"<span class='car-count'>({cars} cars)</span>" if cars.isdigit() else ""
+            
             styled_badge = get_time_badge(mins)
-            st.markdown(f"<div class='transit-row'><span>🚆 To {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='transit-row'><span>🚆 To {dest} {car_html}</span> {styled_badge}</div>", unsafe_allow_html=True)
     else:
         st.markdown("<div class='transit-row'>No trains outside walking window.</div>", unsafe_allow_html=True)
 
@@ -143,12 +149,10 @@ def render_dashboard():
                 if mins_str.isdigit():
                     mins = int(mins_str)
                     
-                    # If it's the C61, filter out anything under 10 minutes
                     if "C61" in label:
                         if mins >= 10:
                             valid_buses.append((b, mins))
                     else:
-                        # Keep all times for the D74 stop
                         valid_buses.append((b, mins))
 
             if valid_buses:
@@ -159,7 +163,6 @@ def render_dashboard():
                     if "C61" in label:
                         styled_badge = get_time_badge(mins)
                     else:
-                        # Neutral format for D74
                         styled_badge = f"<span class='time-badge' style='background-color: #444; color: white;'>{mins} min</span>"
                         
                     st.markdown(f"<div class='transit-row'><span><span class='route-badge'>{route}</span> to {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
