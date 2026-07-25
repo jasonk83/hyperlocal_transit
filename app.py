@@ -116,7 +116,7 @@ def render_dashboard():
                     valid_trains_south.append((t, mins))
 
     # Take exactly 2 from each direction (or however many are available if fewer than 2)
-    display_trains = valid_trains_south[:2] + valid_trains_north[:2]
+    display_trains = valid_trains_south[:3] + valid_trains_north[:3]
     
     # Sort them by time so the final list flows chronologically
     display_trains = sorted(display_trains, key=lambda x: x[1])
