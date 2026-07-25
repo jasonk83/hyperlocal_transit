@@ -2,16 +2,45 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# Page setup
-st.set_page_config(page_title="DC Transit Dashboard", page_icon="🚇", layout="centered")
+# --- PAGE SETUP & MOBILE OPTIMIZATION ---
+st.set_page_config(page_title="Transit Dash", page_icon="🚇", layout="centered")
 
-st.title("🚇 Brookland Transit Dashboard")
+# This custom CSS hides the Streamlit menus, header, and footer to maximize screen space.
+# It also creates custom, large-text rows so it is readable from a distance on a phone screen.
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    .transit-row {
+        font-size: 1.3rem;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5rem;
+    }
+    .time-badge {
+        font-weight: bold;
+        color: #ff4b4b; /* Streamlit Red */
+        float: right;
+    }
+    .route-badge {
+        font-weight: bold;
+        color: #1f77b4; /* Nice blue for bus routes */
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Access API key securely from Streamlit secrets
 if "wmata" in st.secrets and "api_key" in st.secrets["wmata"]:
     WMATA_API_KEY = st.secrets["wmata"]["api_key"]
 else:
-    st.error("WMATA API Key not found. Configure `.streamlit/secrets.toml` locally or set secrets on Streamlit Cloud.")
+    st.error("API Key missing.")
     st.stop()
 
 HEADERS = {"api_key": WMATA_API_KEY}
@@ -19,15 +48,14 @@ HEADERS = {"api_key": WMATA_API_KEY}
 # --- CONFIGURATION ---
 TRAIN_STATION_CODE = "B05"  # Brookland-CUA
 
-# Add future bus lines/stops directly to this dictionary
+# Abbreviated names for the phone screen
 BUS_STOPS = {
-    "C61 (Brookland Bus Bay B)": "1002960",
-    "D74 (12th & Jackson St NE)": "1002032"  # Westbound stop
+    "C61 (Brookland Bay B)": "1002960",
+    "D74 (12th & Jackson)": "1002032"
 }
 
 # --- API HELPERS ---
 def fetch_train_predictions(station_code):
-    """Fetch live rail arrivals for a given station code."""
     url = f"https://api.wmata.com/StationPrediction.svc/json/GetPrediction/{station_code}"
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
@@ -38,7 +66,6 @@ def fetch_train_predictions(station_code):
     return []
 
 def fetch_bus_predictions(stop_id):
-    """Fetch live bus arrivals for a given stop ID."""
     url = f"https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID={stop_id}"
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
@@ -51,36 +78,42 @@ def fetch_bus_predictions(stop_id):
 # --- AUTO-REFRESHING DASHBOARD FRAGMENT ---
 @st.fragment(run_every="30s")
 def render_dashboard():
-    st.caption(f"Last updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}")
+    # Small timestamp at the top so you know the screen isn't frozen
+    st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: gray;'>Updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}</div>", unsafe_allow_html=True)
 
     # 1. Train Arrivals
-    st.header("🔴 Red Line Arrivals (Brookland-CUA)")
+    st.subheader("🔴 Red Line")
     trains = fetch_train_predictions(TRAIN_STATION_CODE)
     
     if trains:
-        df_trains = pd.DataFrame(trains)
-        # Filter for key columns
-        df_trains = df_trains[["Line", "DestinationName", "Min"]]
-        df_trains.columns = ["Line", "Destination", "Arriving In (Min)"]
-        st.dataframe(df_trains, use_container_width=True, hide_index=True)
+        # Limit to the next 4 trains to prevent vertical scrolling on small screens
+        for t in trains[:4]:
+            dest = t.get("DestinationName", "Unknown")
+            mins = t.get("Min", "---")
+            if mins.isdigit():
+                mins = f"{mins} min"
+            st.markdown(f"<div class='transit-row'>🚆 To {dest}: <span class='time-badge'>{mins}</span></div>", unsafe_allow_html=True)
     else:
-        st.info("No train prediction data currently available.")
+        st.markdown("<div class='transit-row'>No trains currently available.</div>", unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True) # Adds a little spacing
 
     # 2. Bus Arrivals
-    st.header("🚌 Live Bus Arrivals")
     for label, stop_id in BUS_STOPS.items():
-        st.subheader(label)
+        st.subheader(f"🚌 {label}")
         buses = fetch_bus_predictions(stop_id)
         
         if buses:
-            df_buses = pd.DataFrame(buses)
-            df_buses = df_buses[["RouteID", "DirectionText", "Minutes"]]
-            df_buses.columns = ["Route", "Direction", "Arriving In (Min)"]
-            st.dataframe(df_buses, use_container_width=True, hide_index=True)
+            # Limit to the next 3 buses per stop
+            for b in buses[:3]:
+                route = b.get("RouteID", "")
+                dest = b.get("DirectionText", "Unknown")
+                mins = b.get("Minutes", "---")
+                if mins.isdigit():
+                    mins = f"{mins} min"
+                st.markdown(f"<div class='transit-row'><span class='route-badge'>{route}</span> to {dest}: <span class='time-badge'>{mins}</span></div>", unsafe_allow_html=True)
         else:
-            st.write("No upcoming bus predictions for this stop.")
+            st.markdown("<div class='transit-row'>No buses currently available.</div>", unsafe_allow_html=True)
 
 # Execute dashboard fragment
 render_dashboard()
