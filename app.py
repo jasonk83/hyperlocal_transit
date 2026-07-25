@@ -108,7 +108,7 @@ def render_dashboard():
             for b in buses[:3]:
                 route = b.get("RouteID", "")
                 dest = b.get("DirectionText", "Unknown")
-                mins = b.get("Minutes", "---")
+                mins = str(b.get("Minutes", "---")) # Convert integer to string first
                 if mins.isdigit():
                     mins = f"{mins} min"
                 st.markdown(f"<div class='transit-row'><span class='route-badge'>{route}</span> to {dest}: <span class='time-badge'>{mins}</span></div>", unsafe_allow_html=True)
