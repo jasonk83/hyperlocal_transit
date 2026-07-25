@@ -5,8 +5,6 @@ import pandas as pd
 # --- PAGE SETUP & MOBILE OPTIMIZATION ---
 st.set_page_config(page_title="Transit Dash", page_icon="🚇", layout="centered")
 
-# CSS hides menus and sets up the base row styling. 
-# We removed the hardcoded badge color because it will be generated dynamically now.
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -78,47 +76,41 @@ def fetch_bus_predictions(stop_id):
     return []
 
 # --- DYNAMIC STYLING HELPER ---
-def get_time_badge(mins_str):
-    """Returns an HTML span with conditional formatting based on time."""
-    # Handle WMATA's text-based arrivals for trains (ARR, BRD)
-    if mins_str in ["ARR", "BRD"]:
-        mins = 0
-        display_text = mins_str
-    else:
-        try:
-            mins = int(mins_str)
-            display_text = f"{mins} min"
-        except ValueError:
-            # Fallback for unexpected strings (e.g., "DLY" for delayed)
-            return f"<span class='time-badge' style='background-color: gray; color: white;'>{mins_str}</span>"
-
-    # Apply conditional colors
-    if mins <= 10:
-        bg_color, text_color = "red", "white"
-    elif 11 <= mins <= 15:
+def get_time_badge(mins):
+    """Returns an HTML span with conditional formatting based on numeric minutes."""
+    # Apply conditional colors based on your 10+ min walk buffer
+    if 11 <= mins <= 15:
         bg_color, text_color = "yellow", "black"
-    else:
+    else: # Greater than 15 minutes
         bg_color, text_color = "green", "white"
 
-    return f"<span class='time-badge' style='background-color: {bg_color}; color: {text_color};'>{display_text}</span>"
+    return f"<span class='time-badge' style='background-color: {bg_color}; color: {text_color};'>{mins} min</span>"
 
 # --- AUTO-REFRESHING DASHBOARD FRAGMENT ---
 @st.fragment(run_every="30s")
 def render_dashboard():
     st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: gray;'>Updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}</div>", unsafe_allow_html=True)
 
-    # 1. Train Arrivals (Applies conditional formatting)
+    # 1. Train Arrivals (Filtered for >= 10 mins)
     st.subheader("🔴 Red Line")
     trains = fetch_train_predictions(TRAIN_STATION_CODE)
     
-    if trains:
-        for t in trains[:4]:
+    valid_trains = []
+    for t in trains:
+        mins_str = str(t.get("Min", ""))
+        # Exclude text codes like ARR, BRD, DLY or anything under 10
+        if mins_str.isdigit():
+            mins = int(mins_str)
+            if mins >= 10:
+                valid_trains.append((t, mins))
+
+    if valid_trains:
+        for t, mins in valid_trains[:4]:
             dest = t.get("DestinationName", "Unknown")
-            mins_str = str(t.get("Min", "---"))
-            styled_badge = get_time_badge(mins_str)
+            styled_badge = get_time_badge(mins)
             st.markdown(f"<div class='transit-row'><span>🚆 To {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div class='transit-row'>No trains currently available.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='transit-row'>No trains outside walking window.</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -128,21 +120,35 @@ def render_dashboard():
         buses = fetch_bus_predictions(stop_id)
         
         if buses:
-            for b in buses[:3]:
-                route = b.get("RouteID", "")
-                dest = b.get("DirectionText", "Unknown")
-                mins_str = str(b.get("Minutes", "---"))
-                
-                # Apply conditional formatting ONLY if it is the C61 route
-                if "C61" in label:
-                    styled_badge = get_time_badge(mins_str)
-                else:
-                    # Neutral gray format for the D74
-                    display_text = f"{mins_str} min" if mins_str.isdigit() else mins_str
-                    styled_badge = f"<span class='time-badge' style='background-color: #444; color: white;'>{display_text}</span>"
+            valid_buses = []
+            for b in buses:
+                mins_str = str(b.get("Minutes", ""))
+                if mins_str.isdigit():
+                    mins = int(mins_str)
                     
-                st.markdown(f"<div class='transit-row'><span><span class='route-badge'>{route}</span> to {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
+                    # If it's the C61, filter out anything under 10 minutes
+                    if "C61" in label:
+                        if mins >= 10:
+                            valid_buses.append((b, mins))
+                    else:
+                        # Keep all times for the D74 stop since it's closer/different logic
+                        valid_buses.append((b, mins))
+
+            if valid_buses:
+                for b, mins in valid_buses[:3]:
+                    route = b.get("RouteID", "")
+                    dest = b.get("DirectionText", "Unknown")
+                    
+                    if "C61" in label:
+                        styled_badge = get_time_badge(mins)
+                    else:
+                        # Neutral format for D74
+                        styled_badge = f"<span class='time-badge' style='background-color: #444; color: white;'>{mins} min</span>"
+                        
+                    st.markdown(f"<div class='transit-row'><span><span class='route-badge'>{route}</span> to {dest}</span> {styled_badge}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='transit-row'>No buses outside walking window.</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div class='transit-row'>No buses currently available.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='transit-row'>No upcoming bus predictions.</div>", unsafe_allow_html=True)
 
 render_dashboard()
