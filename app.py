@@ -78,10 +78,12 @@ def fetch_bus_predictions(stop_id):
 # --- DYNAMIC STYLING HELPER ---
 def get_time_badge(mins):
     """Returns an HTML span with conditional formatting based on numeric minutes."""
-    # Apply conditional colors based on your 10+ min walk buffer
-    if 11 <= mins <= 15:
+    # Apply conditional colors: Red for exactly 10, Yellow for 11-15, Green for 16+
+    if mins == 10:
+        bg_color, text_color = "red", "white"
+    elif 11 <= mins <= 15:
         bg_color, text_color = "yellow", "black"
-    else: # Greater than 15 minutes
+    else: 
         bg_color, text_color = "green", "white"
 
     return f"<span class='time-badge' style='background-color: {bg_color}; color: {text_color};'>{mins} min</span>"
@@ -131,7 +133,7 @@ def render_dashboard():
                         if mins >= 10:
                             valid_buses.append((b, mins))
                     else:
-                        # Keep all times for the D74 stop since it's closer/different logic
+                        # Keep all times for the D74 stop
                         valid_buses.append((b, mins))
 
             if valid_buses:
