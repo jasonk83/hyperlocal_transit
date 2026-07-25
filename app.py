@@ -2,86 +2,85 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# --- CONFIGURATION ---
-# To add more bus lines in the future, just add them to this dictionary.
-# Format: "Display Name": "WMATA_Stop_ID"
-BUS_STOPS = {
-    "C61 (Brookland Bus Bay B)": "1002960",
-    "D74 (12th & Jackson St NE)": "1002032" # Westbound stop ID
-}
+# Page setup
+st.set_page_config(page_title="DC Transit Dashboard", page_icon="🚇", layout="centered")
 
-# Brookland-CUA Station Code
-TRAIN_STATION_CODE = "B05"
-
-# Setup page config
-st.set_page_config(page_title="DC Transit Dashboard", layout="centered")
 st.title("🚇 Brookland Transit Dashboard")
 
-# Securely grab the API key from Streamlit secrets
-try:
+# Access API key securely from Streamlit secrets
+if "wmata" in st.secrets and "api_key" in st.secrets["wmata"]:
     WMATA_API_KEY = st.secrets["wmata"]["api_key"]
-except KeyError:
-    st.error("API Key not found! Please set up your `.streamlit/secrets.toml` file.")
+else:
+    st.error("WMATA API Key not found. Configure `.streamlit/secrets.toml` locally or set secrets on Streamlit Cloud.")
     st.stop()
 
 HEADERS = {"api_key": WMATA_API_KEY}
 
-# --- DATA FETCHING FUNCTIONS ---
-def get_train_predictions(station_code):
-    """Fetch live rail predictions for a specific station."""
+# --- CONFIGURATION ---
+TRAIN_STATION_CODE = "B05"  # Brookland-CUA
+
+# Add future bus lines/stops directly to this dictionary
+BUS_STOPS = {
+    "C61 (Brookland Bus Bay B)": "1002960",
+    "D74 (12th & Jackson St NE)": "1002032"  # Westbound stop
+}
+
+# --- API HELPERS ---
+def fetch_train_predictions(station_code):
+    """Fetch live rail arrivals for a given station code."""
     url = f"https://api.wmata.com/StationPrediction.svc/json/GetPrediction/{station_code}"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        return response.json().get("Trains", [])
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("Trains", [])
+    except requests.exceptions.RequestException:
+        pass
     return []
 
-def get_bus_predictions(stop_id):
-    """Fetch live bus predictions for a specific stop ID."""
+def fetch_bus_predictions(stop_id):
+    """Fetch live bus arrivals for a given stop ID."""
     url = f"https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID={stop_id}"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        return response.json().get("Predictions", [])
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("Predictions", [])
+    except requests.exceptions.RequestException:
+        pass
     return []
 
-# --- AUTO-REFRESHING UI FRAGMENT ---
-# This decorator tells Streamlit to run this specific function every 30 seconds
+# --- AUTO-REFRESHING DASHBOARD FRAGMENT ---
 @st.fragment(run_every="30s")
-def display_live_transit_data():
-    
-    st.write(f"*(Last updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')})*")
+def render_dashboard():
+    st.caption(f"Last updated: {pd.Timestamp.now().strftime('%I:%M:%S %p')}")
 
-    # 1. Display Metro Rail Arrivals
+    # 1. Train Arrivals
     st.header("🔴 Red Line Arrivals (Brookland-CUA)")
-    trains = get_train_predictions(TRAIN_STATION_CODE)
+    trains = fetch_train_predictions(TRAIN_STATION_CODE)
     
     if trains:
-        # Convert to pandas dataframe for a clean table
         df_trains = pd.DataFrame(trains)
-        # Keep only the columns we care about and rename them for the UI
-        df_trains = df_trains[['Line', 'Destination', 'Min']]
-        df_trains.columns = ["Line", "Destination", "Arriving In (min)"]
+        # Filter for key columns
+        df_trains = df_trains[["Line", "DestinationName", "Min"]]
+        df_trains.columns = ["Line", "Destination", "Arriving In (Min)"]
         st.dataframe(df_trains, use_container_width=True, hide_index=True)
     else:
-        st.info("No train predictions available right now.")
+        st.info("No train prediction data currently available.")
 
     st.divider()
 
-    # 2. Display Bus Arrivals
+    # 2. Bus Arrivals
     st.header("🚌 Live Bus Arrivals")
-    
-    # Loop through our configured stops and display each
-    for name, stop_id in BUS_STOPS.items():
-        st.subheader(name)
-        buses = get_bus_predictions(stop_id)
+    for label, stop_id in BUS_STOPS.items():
+        st.subheader(label)
+        buses = fetch_bus_predictions(stop_id)
         
         if buses:
             df_buses = pd.DataFrame(buses)
-            # RouteID is the bus line (e.g., C61), DirectionText is the destination
-            df_buses = df_buses[['RouteID', 'DirectionText', 'Minutes']]
-            df_buses.columns = ["Route", "Direction", "Arriving In (min)"]
+            df_buses = df_buses[["RouteID", "DirectionText", "Minutes"]]
+            df_buses.columns = ["Route", "Direction", "Arriving In (Min)"]
             st.dataframe(df_buses, use_container_width=True, hide_index=True)
         else:
-            st.write("No upcoming buses for this stop.")
+            st.write("No upcoming bus predictions for this stop.")
 
-# Run the live data function
-display_live_transit_data()
+# Execute dashboard fragment
+render_dashboard()
